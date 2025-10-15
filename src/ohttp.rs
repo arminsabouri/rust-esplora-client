@@ -1,0 +1,69 @@
+use bitcoin_ohttp as ohttp;
+
+pub(crate) fn ohttp_encapsulate(
+    method: &str,
+    target_resource: &str,
+    body: Option<&[u8]>,
+) -> Result<(Vec<u8>, ohttp::ClientResponse), ()> {
+    let ohttp_keys: &ohttp::KeyConfig = todo!();
+    use std::fmt::Write;
+
+    let ctx =
+        ohttp::ClientRequest::from_config(&mut ohttp_keys).expect("Failed to create OHTTP context");
+    let url = url::Url::parse(target_resource).expect("Failed to parse URL");
+    let authority_bytes = url.host().map_or_else(Vec::new, |host| {
+        let mut authority = host.to_string();
+        if let Some(port) = url.port() {
+            write!(authority, ":{port}").unwrap();
+        }
+        authority.into_bytes()
+    });
+    let mut bhttp_message = bhttp::Message::request(
+        method.as_bytes().to_vec(),
+        url.scheme().as_bytes().to_vec(),
+        authority_bytes,
+        url.path().as_bytes().to_vec(),
+    );
+    // None of our messages include headers, so we don't add them
+    if let Some(body) = body {
+        bhttp_message.write_content(body);
+    }
+
+    let mut bhttp_req = Vec::new();
+    bhttp_message
+        .write_bhttp(bhttp::Mode::KnownLength, &mut bhttp_req.as_mut_slice())
+        .expect("Failed to write BHTTP message");
+    let (encapsulated, ohttp_ctx) = ctx.encapsulate(&bhttp_req).expect("Failed to encapsulate");
+
+    return Ok((encapsulated, ohttp_ctx));
+}
+
+pub(crate) fn ohttp_decapsulate(
+    res_ctx: ohttp::ClientResponse,
+    ohttp_body: Vec<u8>,
+) -> Result<http::Response<Vec<u8>>, ()> {
+    let bhttp_body = res_ctx
+        .decapsulate(&ohttp_body)
+        .expect("Failed to decapsulate");
+    let mut r = std::io::Cursor::new(bhttp_body);
+    let m: bhttp::Message =
+        bhttp::Message::read_bhttp(&mut r).expect("Failed to read BHTTP message");
+    let mut builder = http::Response::builder();
+    for field in m.header().iter() {
+        builder = builder.header(field.name(), field.value());
+    }
+    Ok(builder
+        .status({
+            let code = m
+                .control()
+                .status()
+                .ok_or(bhttp::Error::InvalidStatus)
+                .expect("Failed to get status");
+
+            http::StatusCode::from_u16(code.code())
+                .map_err(|_| bhttp::Error::InvalidStatus)
+                .expect("Failed to convert status code")
+        })
+        .body(m.content().to_vec())
+        .expect("Failed to build HTTP response"))
+}

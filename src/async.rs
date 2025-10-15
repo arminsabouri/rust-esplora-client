@@ -23,10 +23,12 @@ use bitcoin::{
     block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
 };
 
+use bitcoin_ohttp::*;
+
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
-use reqwest::{header, Client, Response};
+use reqwest::{header, Client};
 
 use crate::api::AddressStats;
 use crate::{
@@ -105,15 +107,17 @@ impl<S: Sleeper> AsyncClient<S> {
     async fn get_response<T: Decodable>(&self, path: &str) -> Result<T, Error> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
+        let status = response.status();
+        let body = response.into_body();
 
-        if !response.status().is_success() {
+        if !status.is_success() {
             return Err(Error::HttpResponse {
-                status: response.status().as_u16(),
-                message: response.text().await?,
+                status: status.as_u16(),
+                message: String::from_utf8_lossy(&body).to_string(),
             });
         }
 
-        Ok(deserialize::<T>(&response.bytes().await?)?)
+        Ok(deserialize::<T>(&body)?)
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -145,15 +149,17 @@ impl<S: Sleeper> AsyncClient<S> {
     ) -> Result<T, Error> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
+        let status = response.status();
+        let body = response.into_body();
 
-        if !response.status().is_success() {
+        if !status.is_success() {
             return Err(Error::HttpResponse {
-                status: response.status().as_u16(),
-                message: response.text().await?,
+                status: status.as_u16(),
+                message: String::from_utf8_lossy(&body).to_string(),
             });
         }
 
-        response.json::<T>().await.map_err(Error::Reqwest)
+        Ok(serde_json::from_slice::<T>(&body)?)
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -187,16 +193,19 @@ impl<S: Sleeper> AsyncClient<S> {
     async fn get_response_hex<T: Decodable>(&self, path: &str) -> Result<T, Error> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
+        let status = response.status();
+        let body = response.into_body();
 
-        if !response.status().is_success() {
+        if !status.is_success() {
             return Err(Error::HttpResponse {
-                status: response.status().as_u16(),
-                message: response.text().await?,
+                status: status.as_u16(),
+                message: String::from_utf8_lossy(&body).to_string(),
             });
         }
 
-        let hex_str = response.text().await?;
-        Ok(deserialize(&Vec::from_hex(&hex_str)?)?)
+        let hex_str = std::str::from_utf8(&body).map_err(|_| Error::InvalidResponse)?;
+        let hex_vec = Vec::from_hex(hex_str)?;
+        Ok(deserialize::<T>(&hex_vec)?)
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -224,15 +233,17 @@ impl<S: Sleeper> AsyncClient<S> {
     async fn get_response_text(&self, path: &str) -> Result<String, Error> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
+        let status = response.status();
+        let body = response.into_body();
 
-        if !response.status().is_success() {
+        if !status.is_success() {
             return Err(Error::HttpResponse {
-                status: response.status().as_u16(),
-                message: response.text().await?,
+                status: status.as_u16(),
+                message: String::from_utf8_lossy(&body).to_string(),
             });
         }
 
-        Ok(response.text().await?)
+        Ok(String::from_utf8(body).map_err(|_| Error::InvalidResponse)?)
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -467,18 +478,35 @@ impl<S: Sleeper> AsyncClient<S> {
 
     /// Sends a GET request to the given `url`, retrying failed attempts
     /// for retryable error codes until max retries hit.
-    async fn get_with_retry(&self, url: &str) -> Result<Response, Error> {
+    async fn get_with_retry(&self, url: &str) -> Result<http::Response<Vec<u8>>, Error> {
         let mut delay = BASE_BACKOFF_MILLIS;
         let mut attempts = 0;
 
         loop {
-            match self.client.get(url).send().await? {
+            // match ohttp_encapsulate(ohttp_keys, method, target_resource, body)
+            let (body, ctx) = super::ohttp::ohttp_encapsulate("get", &url, None)
+                .expect("Failed to encapsulate request");
+            match self
+                .client
+                .post("https://relay.com")
+                .header("Content-Type", "message/ohttp-req")
+                .body(body)
+                .send()
+                .await?
+            {
                 resp if attempts < self.max_retries && is_status_retryable(resp.status()) => {
                     S::sleep(delay).await;
                     attempts += 1;
                     delay *= 2;
                 }
-                resp => return Ok(resp),
+
+                resp => {
+                    let body = resp.bytes().await?.to_vec();
+                    let resp = super::ohttp::ohttp_decapsulate(ctx, body)
+                        .expect("Failed to decapsulate response");
+
+                    return Ok(resp);
+                }
             }
         }
     }

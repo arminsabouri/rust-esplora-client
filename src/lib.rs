@@ -82,6 +82,7 @@ pub mod api;
 pub mod r#async;
 #[cfg(feature = "blocking")]
 pub mod blocking;
+pub mod ohttp;
 
 pub use api::*;
 #[cfg(feature = "blocking")]
@@ -206,6 +207,8 @@ pub enum Error {
     /// Error during reqwest HTTP request
     #[cfg(feature = "async")]
     Reqwest(::reqwest::Error),
+    /// Error while parsing JSON payloads
+    SerdeJson(::serde_json::Error),
     /// HTTP response error
     HttpResponse { status: u16, message: String },
     /// Invalid number returned
@@ -256,6 +259,7 @@ impl std::error::Error for Error {}
 impl_error!(::minreq::Error, Minreq, Error);
 #[cfg(feature = "async")]
 impl_error!(::reqwest::Error, Reqwest, Error);
+impl_error!(::serde_json::Error, SerdeJson, Error);
 impl_error!(std::num::ParseIntError, Parsing, Error);
 impl_error!(bitcoin::consensus::encode::Error, BitcoinEncoding, Error);
 impl_error!(bitcoin::hex::HexToArrayError, HexToArray, Error);
