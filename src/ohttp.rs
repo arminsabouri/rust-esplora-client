@@ -4,12 +4,12 @@ pub(crate) fn ohttp_encapsulate(
     method: &str,
     target_resource: &str,
     body: Option<&[u8]>,
+    ohttp_keys: &mut ohttp::KeyConfig,
 ) -> Result<(Vec<u8>, ohttp::ClientResponse), ()> {
-    let ohttp_keys: &ohttp::KeyConfig = todo!();
     use std::fmt::Write;
 
     let ctx =
-        ohttp::ClientRequest::from_config(&mut ohttp_keys).expect("Failed to create OHTTP context");
+        ohttp::ClientRequest::from_config(ohttp_keys).expect("Failed to create OHTTP context");
     let url = url::Url::parse(target_resource).expect("Failed to parse URL");
     let authority_bytes = url.host().map_or_else(Vec::new, |host| {
         let mut authority = host.to_string();
@@ -31,7 +31,7 @@ pub(crate) fn ohttp_encapsulate(
 
     let mut bhttp_req = Vec::new();
     bhttp_message
-        .write_bhttp(bhttp::Mode::KnownLength, &mut bhttp_req.as_mut_slice())
+        .write_bhttp(bhttp::Mode::IndeterminateLength, &mut bhttp_req)
         .expect("Failed to write BHTTP message");
     let (encapsulated, ohttp_ctx) = ctx.encapsulate(&bhttp_req).expect("Failed to encapsulate");
 
