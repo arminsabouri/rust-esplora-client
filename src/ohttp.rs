@@ -80,3 +80,23 @@ pub(crate) async fn fetch_keys(client: &Client, url: &str) -> ohttp::KeyConfig {
     keys
 }
 
+#[cfg(test)]
+mod tests {
+    // ohttp relay(https://github.com/payjoin/ohttp-relay)
+    // ohttp gateway(https://github.com/arminsabouri/ohttp-gateway/tree/secp256k1-KEM-support)
+    // electrs(https://github.com/Blockstream/electrs/tree/new-index) 
+    // are all set up locally for this test to run. TODO: to automate this for other tests.
+    #[tokio::test]
+    async fn test_ohttp_e2e() {
+        let electrs_url = "http://localhost:3002";
+        let ohttp_gateway_url = "http://localhost:8000";
+        let ohttp_relay_url = "http://localhost:3000";
+        let client = crate::Builder::new(electrs_url)
+            .build_async_with_ohttp(ohttp_relay_url.to_string(), ohttp_gateway_url.to_string())
+            .await
+            .expect("Failed to build client");
+
+        let res = client.get_block_hash(1).await.unwrap();
+        println!("res: {:?}", res);
+    }
+}

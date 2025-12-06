@@ -196,6 +196,23 @@ impl Builder {
     pub fn build_async_with_sleeper<S: Sleeper>(self) -> Result<AsyncClient<S>, Error> {
         AsyncClient::from_builder(self)
     }
+
+    #[cfg(feature = "async")]
+    pub async fn build_async_with_ohttp(
+        self,
+        ohttp_relay_url: String,
+        ohttp_gateway_url: String,
+    ) -> Result<AsyncClient, Error> {
+        use reqwest::Client;
+
+        // One time client to fetch the ohttp keys
+        // TODO: this should be configured to use the ohttp relay as a proxy to get the keys
+        let client = Client::new();
+        let ohttp_keys = ohttp::fetch_keys(&client, &ohttp_gateway_url).await;
+        Ok(AsyncClient::from_builder(self)?
+            .set_ohttp_keys(ohttp_keys)
+            .set_ohttp_relay_url(ohttp_relay_url))
+    }
 }
 
 /// Errors that can happen during a request to `Esplora` servers.

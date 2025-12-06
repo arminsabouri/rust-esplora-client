@@ -23,8 +23,6 @@ use bitcoin::{
     block::Header as BlockHeader, Block, BlockHash, MerkleBlock, Script, Transaction, Txid,
 };
 
-use bitcoin_ohttp::*;
-
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
@@ -47,6 +45,10 @@ pub struct AsyncClient<S = DefaultSleeper> {
 
     /// Marker for the type of sleeper used
     marker: PhantomData<S>,
+    /// Ohttp key config
+    ohttp_keys: Option<bitcoin_ohttp::KeyConfig>,
+    /// Ohttp relay url
+    ohttp_relay_url: Option<String>,
 }
 
 impl<S: Sleeper> AsyncClient<S> {
@@ -81,6 +83,8 @@ impl<S: Sleeper> AsyncClient<S> {
             client: client_builder.build()?,
             max_retries: builder.max_retries,
             marker: PhantomData,
+            ohttp_keys: None,
+            ohttp_relay_url: None,
         })
     }
 
@@ -90,7 +94,19 @@ impl<S: Sleeper> AsyncClient<S> {
             client,
             max_retries: crate::DEFAULT_MAX_RETRIES,
             marker: PhantomData,
+            ohttp_keys: None,
+            ohttp_relay_url: None,
         }
+    }
+
+    pub fn set_ohttp_keys(mut self, ohttp_keys: bitcoin_ohttp::KeyConfig) -> Self {
+        self.ohttp_keys = Some(ohttp_keys);
+        self
+    }
+
+    pub fn set_ohttp_relay_url(mut self, ohttp_relay_url: String) -> Self {
+        self.ohttp_relay_url = Some(ohttp_relay_url);
+        self
     }
 
     /// Make an HTTP GET request to given URL, deserializing to any `T` that
@@ -482,13 +498,17 @@ impl<S: Sleeper> AsyncClient<S> {
         let mut delay = BASE_BACKOFF_MILLIS;
         let mut attempts = 0;
 
+        // TODO: we need to abstrat this method to be able to use it with or without ohttp
+        let target_url = self.ohttp_relay_url.as_ref().expect("POC hardcoded for this to exist");
+        // FIXME: this shouldnt be cloned. Just lazy to switch self to be mutable ref.
+        let mut ohttp_keys = self.ohttp_keys.clone().expect("POC hardcoded for this to exist");
         loop {
             // match ohttp_encapsulate(ohttp_keys, method, target_resource, body)
-            let (body, ctx) = super::ohttp::ohttp_encapsulate("get", &url, None)
-                .expect("Failed to encapsulate request");
+
+            let (body, ctx) = super::ohttp::ohttp_encapsulate("get", &url, None, &mut ohttp_keys).expect("Failed to encapsulate request");
             match self
                 .client
-                .post("https://relay.com")
+                .post(target_url)
                 .header("Content-Type", "message/ohttp-req")
                 .body(body)
                 .send()
