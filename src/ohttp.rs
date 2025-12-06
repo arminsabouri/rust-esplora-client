@@ -1,4 +1,5 @@
 use bitcoin_ohttp as ohttp;
+use reqwest::Client;
 
 pub(crate) fn ohttp_encapsulate(
     method: &str,
@@ -67,3 +68,15 @@ pub(crate) fn ohttp_decapsulate(
         .body(m.content().to_vec())
         .expect("Failed to build HTTP response"))
 }
+
+pub(crate) async fn fetch_keys(client: &Client, url: &str) -> ohttp::KeyConfig {
+    let res = client
+        .get(format!("{}/ohttp-configs", url))
+        .send()
+        .await
+        .expect("Failed to send request");
+    let body = res.bytes().await.expect("Failed to get body");
+    let keys = ohttp::KeyConfig::decode(&body).expect("Failed to parse keys");
+    keys
+}
+
