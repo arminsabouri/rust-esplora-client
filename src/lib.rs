@@ -210,7 +210,7 @@ impl Builder {
         // One time client to fetch the ohttp keys
         // TODO: this should be configured to use the ohttp relay as a proxy to get the keys
         let client = Client::new();
-        let ohttp_keys = ohttp::fetch_keys(&client, &ohttp_gateway_url).await;
+        let ohttp_keys = ohttp::fetch_keys(&client, &ohttp_gateway_url).await?;
         Ok(
             AsyncClient::from_builder(self)?.set_ohttp_config(r#async::OhttpConfig {
                 key_config: ohttp_keys,
@@ -255,6 +255,15 @@ pub enum Error {
     InvalidHttpHeaderValue(String),
     /// The server sent an invalid response
     InvalidResponse,
+    /// Error from Ohttp library
+    #[cfg(feature = "ohttp")]
+    Ohttp(bitcoin_ohttp::Error),
+    /// Error when reading and writing to bhttp payloads
+    #[cfg(feature = "ohttp")]
+    Bhttp(bhttp::Error),
+    /// Error when converting the http response to and from bhttp response
+    #[cfg(feature = "ohttp")]
+    Http(http::Error),
 }
 
 impl fmt::Display for Error {

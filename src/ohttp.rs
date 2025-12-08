@@ -1,3 +1,4 @@
+use crate::Error;
 use bitcoin_ohttp as ohttp;
 use reqwest::Client;
 
@@ -6,12 +7,11 @@ pub(crate) fn ohttp_encapsulate(
     target_resource: &str,
     body: Option<&[u8]>,
     ohttp_keys: &mut ohttp::KeyConfig,
-) -> Result<(Vec<u8>, ohttp::ClientResponse), ()> {
+) -> Result<(Vec<u8>, ohttp::ClientResponse), Error> {
     use std::fmt::Write;
 
-    let ctx =
-        ohttp::ClientRequest::from_config(ohttp_keys).expect("Failed to create OHTTP context");
-    let url = url::Url::parse(target_resource).expect("Failed to parse URL");
+    let ctx = ohttp::ClientRequest::from_config(ohttp_keys).map_err(Error::Ohttp)?;
+    let url = url::Url::parse(target_resource).expect("should be validated by the caller");
     let authority_bytes = url.host().map_or_else(Vec::new, |host| {
         let mut authority = host.to_string();
         if let Some(port) = url.port() {
@@ -33,8 +33,8 @@ pub(crate) fn ohttp_encapsulate(
     let mut bhttp_req = Vec::new();
     bhttp_message
         .write_bhttp(bhttp::Mode::IndeterminateLength, &mut bhttp_req)
-        .expect("Failed to write BHTTP message");
-    let (encapsulated, ohttp_ctx) = ctx.encapsulate(&bhttp_req).expect("Failed to encapsulate");
+        .map_err(Error::Bhttp)?;
+    let (encapsulated, ohttp_ctx) = ctx.encapsulate(&bhttp_req).map_err(Error::Ohttp)?;
 
     return Ok((encapsulated, ohttp_ctx));
 }
@@ -42,13 +42,10 @@ pub(crate) fn ohttp_encapsulate(
 pub(crate) fn ohttp_decapsulate(
     res_ctx: ohttp::ClientResponse,
     ohttp_body: Vec<u8>,
-) -> Result<http::Response<Vec<u8>>, ()> {
-    let bhttp_body = res_ctx
-        .decapsulate(&ohttp_body)
-        .expect("Failed to decapsulate");
+) -> Result<http::Response<Vec<u8>>, Error> {
+    let bhttp_body = res_ctx.decapsulate(&ohttp_body).map_err(Error::Ohttp)?;
     let mut r = std::io::Cursor::new(bhttp_body);
-    let m: bhttp::Message =
-        bhttp::Message::read_bhttp(&mut r).expect("Failed to read BHTTP message");
+    let m: bhttp::Message = bhttp::Message::read_bhttp(&mut r).map_err(Error::Bhttp)?;
     let mut builder = http::Response::builder();
     for field in m.header().iter() {
         builder = builder.header(field.name(), field.value());
@@ -66,18 +63,18 @@ pub(crate) fn ohttp_decapsulate(
                 .expect("Failed to convert status code")
         })
         .body(m.content().to_vec())
-        .expect("Failed to build HTTP response"))
+        .map_err(Error::Http)?)
 }
 
-pub(crate) async fn fetch_keys(client: &Client, url: &str) -> ohttp::KeyConfig {
+pub(crate) async fn fetch_keys(client: &Client, url: &str) -> Result<ohttp::KeyConfig, Error> {
     let res = client
         .get(format!("{}/ohttp-configs", url))
         .send()
         .await
-        .expect("Failed to send request");
-    let body = res.bytes().await.expect("Failed to get body");
-    let keys = ohttp::KeyConfig::decode(&body).expect("Failed to parse keys");
-    keys
+        .map_err(Error::Reqwest)?;
+    let body = res.bytes().await.map_err(Error::Reqwest)?;
+    let keys = ohttp::KeyConfig::decode(&body).map_err(Error::Ohttp)?;
+    Ok(keys)
 }
 
 #[cfg(test)]

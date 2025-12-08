@@ -506,8 +506,7 @@ impl<S: Sleeper> AsyncClient<S> {
             .key_config
             .clone();
         loop {
-            let (body, ctx) = super::ohttp::ohttp_encapsulate("get", &url, None, &mut ohttp_keys)
-                .expect("Failed to encapsulate request");
+            let (body, ctx) = super::ohttp::ohttp_encapsulate("get", &url, None, &mut ohttp_keys)?;
             match self
                 .client
                 .post(&target_url)
@@ -524,8 +523,7 @@ impl<S: Sleeper> AsyncClient<S> {
 
                 resp => {
                     let body = resp.bytes().await?.to_vec();
-                    let resp = super::ohttp::ohttp_decapsulate(ctx, body)
-                        .expect("Failed to decapsulate response");
+                    let resp = super::ohttp::ohttp_decapsulate(ctx, body)?;
 
                     return Ok(resp.into());
                 }
