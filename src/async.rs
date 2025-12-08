@@ -491,42 +491,35 @@ impl<S: Sleeper> AsyncClient<S> {
         let mut delay = BASE_BACKOFF_MILLIS;
         let mut attempts = 0;
 
-        // TODO: we need to abstrat this method to be able to use it with or without ohttp
-        let target_url = self
-            .ohttp_config
-            .as_ref()
-            .expect("POC hardcoded for this to exist")
-            .relay_url
-            .clone();
-        // Bitcoin-hpke takes keyconfig as mutable ref but it doesnt mutate it. We can clone here but should fix it upstream.
-        let mut ohttp_keys = self
-            .ohttp_config
-            .as_ref()
-            .expect("POC hardcoded for this to exist")
-            .key_config
-            .clone();
         loop {
-            let (body, ctx) = super::ohttp::ohttp_encapsulate("get", &url, None, &mut ohttp_keys)?;
-            match self
-                .client
-                .post(&target_url)
-                .header("Content-Type", "message/ohttp-req")
-                .body(body)
-                .send()
-                .await?
-            {
+            let res = {
+                if let Some(ohttp_config) = &self.ohttp_config {
+                    // Bitcoin-hpke takes keyconfig as mutable ref but it doesnt mutate it should fix it upstream but for now we can clone it to avoid changing self to mutable self
+                    let mut ohttp_keys = ohttp_config.key_config.clone();
+
+                    let (body, ctx) =
+                        super::ohttp::ohttp_encapsulate("get", &url, None, &mut ohttp_keys)?;
+                    let res = self
+                        .client
+                        .post(&ohttp_config.relay_url)
+                        .header("Content-Type", "message/ohttp-req")
+                        .body(body)
+                        .send()
+                        .await?;
+                    let body = res.bytes().await?.to_vec();
+                    super::ohttp::ohttp_decapsulate(ctx, body)?.into()
+                } else {
+                    self.client.get(url).send().await?
+                }
+            };
+            match res {
                 resp if attempts < self.max_retries && is_status_retryable(resp.status()) => {
                     S::sleep(delay).await;
                     attempts += 1;
                     delay *= 2;
                 }
 
-                resp => {
-                    let body = resp.bytes().await?.to_vec();
-                    let resp = super::ohttp::ohttp_decapsulate(ctx, body)?;
-
-                    return Ok(resp.into());
-                }
+                resp => return Ok(resp.into()),
             }
         }
     }
