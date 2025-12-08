@@ -502,7 +502,7 @@ impl<S: Sleeper> AsyncClient<S> {
             .expect("POC hardcoded for this to exist")
             .relay_url
             .clone();
-        // FIXME: this shouldnt be cloned. Just lazy to switch self to be mutable ref.
+        // Bitcoin-hpke takes keyconfig as mutable ref but it doesnt mutate it. We can clone here but should fix it upstream.
         let mut ohttp_keys = self
             .ohttp_config
             .as_ref()
@@ -510,8 +510,6 @@ impl<S: Sleeper> AsyncClient<S> {
             .key_config
             .clone();
         loop {
-            // match ohttp_encapsulate(ohttp_keys, method, target_resource, body)
-
             let (body, ctx) = super::ohttp::ohttp_encapsulate("get", &url, None, &mut ohttp_keys)
                 .expect("Failed to encapsulate request");
             match self
