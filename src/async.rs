@@ -26,7 +26,7 @@ use bitcoin::{
 #[allow(unused_imports)]
 use log::{debug, error, info, trace};
 
-use reqwest::{header, Client};
+use reqwest::{header, Client, Response};
 
 use crate::api::AddressStats;
 use crate::{
@@ -120,17 +120,15 @@ impl<S: Sleeper> AsyncClient<S> {
     async fn get_response<T: Decodable>(&self, path: &str) -> Result<T, Error> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
-        let status = response.status();
-        let body = response.into_body();
 
-        if !status.is_success() {
+        if !response.status().is_success() {
             return Err(Error::HttpResponse {
-                status: status.as_u16(),
-                message: String::from_utf8_lossy(&body).to_string(),
+                status: response.status().as_u16(),
+                message: response.text().await?,
             });
         }
 
-        Ok(deserialize::<T>(&body)?)
+        Ok(deserialize::<T>(&response.bytes().await?)?)
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -162,17 +160,15 @@ impl<S: Sleeper> AsyncClient<S> {
     ) -> Result<T, Error> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
-        let status = response.status();
-        let body = response.into_body();
 
-        if !status.is_success() {
+        if !response.status().is_success() {
             return Err(Error::HttpResponse {
-                status: status.as_u16(),
-                message: String::from_utf8_lossy(&body).to_string(),
+                status: response.status().as_u16(),
+                message: response.text().await?,
             });
         }
 
-        Ok(serde_json::from_slice::<T>(&body)?)
+        response.json::<T>().await.map_err(Error::Reqwest)
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -206,19 +202,16 @@ impl<S: Sleeper> AsyncClient<S> {
     async fn get_response_hex<T: Decodable>(&self, path: &str) -> Result<T, Error> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
-        let status = response.status();
-        let body = response.into_body();
 
-        if !status.is_success() {
+        if !response.status().is_success() {
             return Err(Error::HttpResponse {
-                status: status.as_u16(),
-                message: String::from_utf8_lossy(&body).to_string(),
+                status: response.status().as_u16(),
+                message: response.text().await?,
             });
         }
 
-        let hex_str = std::str::from_utf8(&body).map_err(|_| Error::InvalidResponse)?;
-        let hex_vec = Vec::from_hex(hex_str)?;
-        Ok(deserialize::<T>(&hex_vec)?)
+        let hex_str = response.text().await?;
+        Ok(deserialize(&Vec::from_hex(&hex_str)?)?)
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -246,17 +239,15 @@ impl<S: Sleeper> AsyncClient<S> {
     async fn get_response_text(&self, path: &str) -> Result<String, Error> {
         let url = format!("{}{}", self.url, path);
         let response = self.get_with_retry(&url).await?;
-        let status = response.status();
-        let body = response.into_body();
 
-        if !status.is_success() {
+        if !response.status().is_success() {
             return Err(Error::HttpResponse {
-                status: status.as_u16(),
-                message: String::from_utf8_lossy(&body).to_string(),
+                status: response.status().as_u16(),
+                message: response.text().await?,
             });
         }
 
-        Ok(String::from_utf8(body).map_err(|_| Error::InvalidResponse)?)
+        Ok(response.text().await?)
     }
 
     /// Make an HTTP GET request to given URL, deserializing to `Option<T>`.
@@ -491,7 +482,7 @@ impl<S: Sleeper> AsyncClient<S> {
 
     /// Sends a GET request to the given `url`, retrying failed attempts
     /// for retryable error codes until max retries hit.
-    async fn get_with_retry(&self, url: &str) -> Result<http::Response<Vec<u8>>, Error> {
+    async fn get_with_retry(&self, url: &str) -> Result<Response, Error> {
         let mut delay = BASE_BACKOFF_MILLIS;
         let mut attempts = 0;
 
@@ -531,7 +522,7 @@ impl<S: Sleeper> AsyncClient<S> {
                     let resp = super::ohttp::ohttp_decapsulate(ctx, body)
                         .expect("Failed to decapsulate response");
 
-                    return Ok(resp);
+                    return Ok(resp.into());
                 }
             }
         }
