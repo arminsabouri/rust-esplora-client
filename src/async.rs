@@ -34,6 +34,7 @@ use crate::{
     BASE_BACKOFF_MILLIS, RETRYABLE_ERROR_CODES,
 };
 
+#[cfg(feature = "ohttp")]
 #[derive(Debug, Clone)]
 pub(crate) struct OhttpConfig {
     pub(crate) key_config: bitcoin_ohttp::KeyConfig,
@@ -52,6 +53,7 @@ pub struct AsyncClient<S = DefaultSleeper> {
     /// Marker for the type of sleeper used
     marker: PhantomData<S>,
     /// Ohttp config
+    #[cfg(feature = "ohttp")]
     ohttp_config: Option<OhttpConfig>,
 }
 
@@ -87,6 +89,7 @@ impl<S: Sleeper> AsyncClient<S> {
             client: client_builder.build()?,
             max_retries: builder.max_retries,
             marker: PhantomData,
+            #[cfg(feature = "ohttp")]
             ohttp_config: None,
         })
     }
@@ -97,10 +100,12 @@ impl<S: Sleeper> AsyncClient<S> {
             client,
             max_retries: crate::DEFAULT_MAX_RETRIES,
             marker: PhantomData,
+            #[cfg(feature = "ohttp")]
             ohttp_config: None,
         }
     }
 
+    #[cfg(feature = "ohttp")]
     pub(crate) fn set_ohttp_config(mut self, ohttp_config: OhttpConfig) -> Self {
         self.ohttp_config = Some(ohttp_config);
         self

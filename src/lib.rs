@@ -82,7 +82,9 @@ pub mod api;
 pub mod r#async;
 #[cfg(feature = "blocking")]
 pub mod blocking;
-pub mod ohttp;
+
+#[cfg(feature = "ohttp")]
+pub(crate) mod ohttp;
 
 pub use api::*;
 #[cfg(feature = "blocking")]
@@ -197,7 +199,7 @@ impl Builder {
         AsyncClient::from_builder(self)
     }
 
-    #[cfg(feature = "async")]
+    #[cfg(all(feature = "async", feature = "ohttp"))]
     pub async fn build_async_with_ohttp(
         self,
         ohttp_relay_url: String,
