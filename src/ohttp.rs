@@ -68,7 +68,7 @@ pub(crate) fn ohttp_decapsulate(
 
 pub(crate) async fn fetch_keys(client: &Client, url: &str) -> Result<ohttp::KeyConfig, Error> {
     let res = client
-        .get(format!("{}/ohttp-configs", url))
+        .get(format!("{}/.well-known/ohttp-gateway", url))
         .send()
         .await
         .map_err(Error::Reqwest)?;
