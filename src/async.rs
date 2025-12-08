@@ -35,6 +35,12 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
+pub(crate) struct OhttpConfig {
+    pub(crate) key_config: bitcoin_ohttp::KeyConfig,
+    pub(crate) relay_url: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct AsyncClient<S = DefaultSleeper> {
     /// The URL of the Esplora Server.
     url: String,
@@ -45,10 +51,8 @@ pub struct AsyncClient<S = DefaultSleeper> {
 
     /// Marker for the type of sleeper used
     marker: PhantomData<S>,
-    /// Ohttp key config
-    ohttp_keys: Option<bitcoin_ohttp::KeyConfig>,
-    /// Ohttp relay url
-    ohttp_relay_url: Option<String>,
+    /// Ohttp config
+    ohttp_config: Option<OhttpConfig>,
 }
 
 impl<S: Sleeper> AsyncClient<S> {
@@ -83,8 +87,7 @@ impl<S: Sleeper> AsyncClient<S> {
             client: client_builder.build()?,
             max_retries: builder.max_retries,
             marker: PhantomData,
-            ohttp_keys: None,
-            ohttp_relay_url: None,
+            ohttp_config: None,
         })
     }
 
@@ -94,18 +97,12 @@ impl<S: Sleeper> AsyncClient<S> {
             client,
             max_retries: crate::DEFAULT_MAX_RETRIES,
             marker: PhantomData,
-            ohttp_keys: None,
-            ohttp_relay_url: None,
+            ohttp_config: None,
         }
     }
 
-    pub fn set_ohttp_keys(mut self, ohttp_keys: bitcoin_ohttp::KeyConfig) -> Self {
-        self.ohttp_keys = Some(ohttp_keys);
-        self
-    }
-
-    pub fn set_ohttp_relay_url(mut self, ohttp_relay_url: String) -> Self {
-        self.ohttp_relay_url = Some(ohttp_relay_url);
+    pub(crate) fn set_ohttp_config(mut self, ohttp_config: OhttpConfig) -> Self {
+        self.ohttp_config = Some(ohttp_config);
         self
     }
 
@@ -499,16 +496,27 @@ impl<S: Sleeper> AsyncClient<S> {
         let mut attempts = 0;
 
         // TODO: we need to abstrat this method to be able to use it with or without ohttp
-        let target_url = self.ohttp_relay_url.as_ref().expect("POC hardcoded for this to exist");
+        let target_url = self
+            .ohttp_config
+            .as_ref()
+            .expect("POC hardcoded for this to exist")
+            .relay_url
+            .clone();
         // FIXME: this shouldnt be cloned. Just lazy to switch self to be mutable ref.
-        let mut ohttp_keys = self.ohttp_keys.clone().expect("POC hardcoded for this to exist");
+        let mut ohttp_keys = self
+            .ohttp_config
+            .as_ref()
+            .expect("POC hardcoded for this to exist")
+            .key_config
+            .clone();
         loop {
             // match ohttp_encapsulate(ohttp_keys, method, target_resource, body)
 
-            let (body, ctx) = super::ohttp::ohttp_encapsulate("get", &url, None, &mut ohttp_keys).expect("Failed to encapsulate request");
+            let (body, ctx) = super::ohttp::ohttp_encapsulate("get", &url, None, &mut ohttp_keys)
+                .expect("Failed to encapsulate request");
             match self
                 .client
-                .post(target_url)
+                .post(&target_url)
                 .header("Content-Type", "message/ohttp-req")
                 .body(body)
                 .send()

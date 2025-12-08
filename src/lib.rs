@@ -209,9 +209,12 @@ impl Builder {
         // TODO: this should be configured to use the ohttp relay as a proxy to get the keys
         let client = Client::new();
         let ohttp_keys = ohttp::fetch_keys(&client, &ohttp_gateway_url).await;
-        Ok(AsyncClient::from_builder(self)?
-            .set_ohttp_keys(ohttp_keys)
-            .set_ohttp_relay_url(ohttp_relay_url))
+        Ok(
+            AsyncClient::from_builder(self)?.set_ohttp_config(r#async::OhttpConfig {
+                key_config: ohttp_keys,
+                relay_url: ohttp_relay_url,
+            }),
+        )
     }
 }
 
