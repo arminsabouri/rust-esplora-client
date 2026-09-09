@@ -32,7 +32,6 @@ tokio = { version = "1.47.1", features = ["time"], optional = true } # Async Cli
 
 [dev-dependencies]
 electrsd = { version = "0.41.0", default-features = false, features = ["legacy", "esplora_a33e97e1", "bitcoind_download", "bitcoind_29_0"] }
-ohttp-client = { version = "0.0.0-alpha", features = ["harness"] } # async-ohttp integration test harness
 tokio = { version = "1.47.1", features = ["full"] } # blame: match the `tokio` floor above
 # Transitive dependency pins:
 anyhow = { version = "1.0.103" } # blame: electrsd@0.41.0 -> anyhow@1.0.102 (RUSTSEC-2026-0190)
@@ -59,6 +58,10 @@ async-https-native = ["async", "bitreq/async-https-native-tls"]
 async-https-rustls = ["async", "bitreq/async-https-rustls"]
 async-https-rustls-probe = ["async", "bitreq/async-https-rustls-probe"]
 async-ohttp = ["async", "dep:ohttp-client", "tokio"]
+# Test-only: the OHTTP integration test harness. Private (leading `_`).
+# `ohttp-client` cannot be a dev-dependency because those cannot be optional,
+# and an unconditional one requires rustc 1.85 for every MSRV test run.
+_ohttp-harness = ["async-ohttp", "ohttp-client/harness"]
 
 blocking = ["bitreq/proxy", "bitreq/json-using-serde"]
 blocking-https = ["blocking", "bitreq/https"]
@@ -93,6 +96,8 @@ allowed_duplicates = [
 ]
 
 [package.metadata.rbmt.test]
+# blame: ohttp-client requires rustc 1.85, above this package's 1.75 MSRV.
+msrv_overrides = { "async-ohttp" = "1.85.0", "_ohttp-harness" = "1.85.0" }
 # Don't test these features in isolation
 exclude_features = [
     "tokio",
@@ -101,6 +106,7 @@ exclude_features = [
     "async-https-rustls",
     "async-https-rustls-probe",
     "async-ohttp",
+    "_ohttp-harness",
     "blocking-https",
     "blocking-https-native",
     "blocking-https-rustls",
@@ -113,5 +119,5 @@ exact_features = [
     ["async-https-native", "blocking-https-native", "tokio"],
     ["async-https-rustls", "blocking-https-rustls", "tokio"],
     ["async-https-rustls-probe", "blocking-https-rustls-probe", "tokio"],
-    ["async-ohttp", "blocking", "tokio"],
+    ["_ohttp-harness", "blocking", "tokio"],
 ]

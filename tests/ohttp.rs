@@ -7,7 +7,7 @@
 //! gateway from [`ohttp_client::harness`], and verifies the result matches a
 //! direct (non-OHTTP) request.
 
-#![cfg(all(feature = "async-ohttp", feature = "tokio"))]
+#![cfg(all(feature = "_ohttp-harness", feature = "tokio"))]
 
 use ohttp_client::harness::TestHarness;
 
