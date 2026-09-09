@@ -82,10 +82,9 @@
 //!   (SSL) using the `rustls` TLS backend.
 //! * `async-https-rustls-probe` enables [`bitreq`], the async client with support for proxying and
 //!   TLS (SSL) using `rustls` and probed system roots.
-//! * `async-ohttp` enables optional Oblivious HTTP tunneling for the async client via
-//!   [`ohttp-client`](https://crates.io/crates/ohttp-client). Note that this feature does not
-//!   itself pull in a TLS backend: reaching an `https` relay or gateway also requires one of the
-//!   `async-https*` features.
+//! * `async-ohttp` enables optional Oblivious HTTP tunneling for the async client via [`ohttp-client`](https://crates.io/crates/ohttp-client).
+//!   Note that this feature does not itself pull in a TLS backend: reaching an `https` relay or
+//!   gateway also requires one of the `async-https*` features.
 //! * `tokio` enables the default async sleeper used by [`Builder::build_async`].
 //!
 //! [Esplora]: https://github.com/Blockstream/esplora/blob/master/API.md
